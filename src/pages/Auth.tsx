@@ -1,16 +1,21 @@
 import { useState, useEffect } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GraduationCap, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { GraduationCap, Mail, Lock, User, ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import heroBg from "@/assets/hero-bg.png";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [isSignup, setIsSignup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -21,10 +26,71 @@ const Auth = () => {
     setIsSignup(searchParams.get("mode") === "signup");
   }, [searchParams]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Check for existing session
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (session) {
+          navigate("/dashboard");
+        }
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        navigate("/dashboard");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement auth with Supabase
-    console.log("Form submitted:", formData);
+    setLoading(true);
+
+    try {
+      if (isSignup) {
+        const { error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/dashboard`,
+            data: {
+              full_name: formData.name,
+            },
+          },
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "Account created!",
+          description: "Please check your email to verify your account.",
+        });
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "Welcome back!",
+          description: "Successfully signed in.",
+        });
+        navigate("/dashboard");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred during authentication.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -77,6 +143,7 @@ const Auth = () => {
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
+                    required
                   />
                 </div>
               </div>
@@ -97,6 +164,7 @@ const Auth = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
+                  required
                 />
               </div>
             </div>
@@ -116,6 +184,8 @@ const Auth = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, password: e.target.value })
                   }
+                  required
+                  minLength={6}
                 />
                 <button
                   type="button"
@@ -131,8 +201,15 @@ const Auth = () => {
               </div>
             </div>
 
-            <Button type="submit" variant="hero" size="lg" className="w-full">
-              {isSignup ? "Create Account" : "Sign In"}
+            <Button type="submit" variant="hero" size="lg" className="w-full" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {isSignup ? "Creating Account..." : "Signing In..."}
+                </>
+              ) : (
+                isSignup ? "Create Account" : "Sign In"
+              )}
             </Button>
           </form>
 
