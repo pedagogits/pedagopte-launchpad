@@ -1,9 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const ALLOWED_QUESTION_TYPES = [
+  "read-aloud", "repeat-sentence", "describe-image", "retell-lecture",
+  "answer-short-question", "respond-situation", "summarize-discussion",
+  "summarize-written-text", "essay", "summarize-spoken-text", "write-from-dictation"
+];
+
+const MAX_QUESTION_TEXT_LENGTH = 5000;
+const MAX_USER_RESPONSE_LENGTH = 10000;
+const MAX_AUDIO_TRANSCRIPT_LENGTH = 5000;
 
 interface ScoreRequest {
   questionType: string;
@@ -12,13 +23,105 @@ interface ScoreRequest {
   audioTranscript?: string;
 }
 
+function sanitizeInput(input: string): string {
+  // Remove potential prompt injection patterns
+  return input
+    .replace(/\b(system|assistant|user)\s*:/gi, '')
+    .replace(/```/g, '')
+    .replace(/<\/?[^>]+(>|$)/g, '') // Remove HTML tags
+    .trim();
+}
+
+function validateRequest(data: ScoreRequest): { valid: boolean; error?: string } {
+  if (!data.questionType || typeof data.questionType !== 'string') {
+    return { valid: false, error: 'Missing or invalid questionType' };
+  }
+  
+  if (!ALLOWED_QUESTION_TYPES.includes(data.questionType)) {
+    return { valid: false, error: `Invalid questionType. Must be one of: ${ALLOWED_QUESTION_TYPES.join(', ')}` };
+  }
+  
+  if (!data.questionText || typeof data.questionText !== 'string') {
+    return { valid: false, error: 'Missing or invalid questionText' };
+  }
+  
+  if (data.questionText.length > MAX_QUESTION_TEXT_LENGTH) {
+    return { valid: false, error: `questionText exceeds maximum length of ${MAX_QUESTION_TEXT_LENGTH} characters` };
+  }
+  
+  if (!data.userResponse || typeof data.userResponse !== 'string') {
+    return { valid: false, error: 'Missing or invalid userResponse' };
+  }
+  
+  if (data.userResponse.length > MAX_USER_RESPONSE_LENGTH) {
+    return { valid: false, error: `userResponse exceeds maximum length of ${MAX_USER_RESPONSE_LENGTH} characters` };
+  }
+  
+  if (data.audioTranscript && typeof data.audioTranscript !== 'string') {
+    return { valid: false, error: 'Invalid audioTranscript format' };
+  }
+  
+  if (data.audioTranscript && data.audioTranscript.length > MAX_AUDIO_TRANSCRIPT_LENGTH) {
+    return { valid: false, error: `audioTranscript exceeds maximum length of ${MAX_AUDIO_TRANSCRIPT_LENGTH} characters` };
+  }
+  
+  return { valid: true };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { questionType, questionText, userResponse, audioTranscript } = await req.json() as ScoreRequest;
+    // Verify JWT authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Missing or invalid authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    });
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error('Auth error:', authError);
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`Authenticated user: ${user.id} requesting score`);
+
+    const requestData = await req.json() as ScoreRequest;
+    
+    // Validate input
+    const validation = validateRequest(requestData);
+    if (!validation.valid) {
+      return new Response(JSON.stringify({ error: validation.error }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Sanitize inputs
+    const questionType = requestData.questionType;
+    const questionText = sanitizeInput(requestData.questionText);
+    const userResponse = sanitizeInput(requestData.userResponse);
+    const audioTranscript = requestData.audioTranscript ? sanitizeInput(requestData.audioTranscript) : undefined;
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
