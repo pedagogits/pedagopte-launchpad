@@ -135,6 +135,39 @@ export type Database = {
         }
         Relationships: []
       }
+      purchase_history: {
+        Row: {
+          amount: number
+          created_at: string
+          credits_purchased: number
+          id: string
+          payment_method: string | null
+          status: string
+          stripe_payment_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          credits_purchased: number
+          id?: string
+          payment_method?: string | null
+          status?: string
+          stripe_payment_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          credits_purchased?: number
+          id?: string
+          payment_method?: string | null
+          status?: string
+          stripe_payment_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       question_types_2025_11_29_02_00: {
         Row: {
           code: string
@@ -345,6 +378,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_credits: {
+        Row: {
+          created_at: string
+          id: string
+          subscription_expires_at: string | null
+          subscription_tier: string
+          total_credits: number
+          updated_at: string
+          used_credits: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          subscription_expires_at?: string | null
+          subscription_tier?: string
+          total_credits?: number
+          updated_at?: string
+          used_credits?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          subscription_expires_at?: string | null
+          subscription_tier?: string
+          total_credits?: number
+          updated_at?: string
+          used_credits?: number
+          user_id?: string
+        }
+        Relationships: []
       }
       user_profiles_2025_11_29_02_00: {
         Row: {
