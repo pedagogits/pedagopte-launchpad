@@ -53,13 +53,22 @@ export const useQuestionTimer = ({
     setIsTimeUp(false);
   }, [initialTime]);
 
+  const formatTime = useCallback((seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }, []);
+
   return {
     timeRemaining,
     isRunning,
     isTimeUp,
+    isExpired: isTimeUp,
     start,
     pause,
     reset,
+    resetTimer: reset,
     restart,
+    formatTime,
   };
 };

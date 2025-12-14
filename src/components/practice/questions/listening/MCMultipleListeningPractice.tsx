@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import QuestionLayout from "../QuestionLayout";
+import ScoreDisplay from "../../ScoreDisplay";
 import { useQuestionTimer } from "../useQuestionTimer";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Play, Pause, Volume2, RotateCcw } from "lucide-react";
-import ScoreDisplay from "../../ScoreDisplay";
 
 interface MCMultipleListeningPracticeProps {
   questionId?: string;
@@ -27,15 +28,21 @@ const sampleQuestion = {
 };
 
 const MCMultipleListeningPractice = ({ questionId }: MCMultipleListeningPracticeProps) => {
+  const navigate = useNavigate();
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasPlayed, setHasPlayed] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
-  const [score, setScore] = useState<number | null>(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showScore, setShowScore] = useState(false);
+  const [scoreResult, setScoreResult] = useState<{
+    overallScore: number;
+    contentScore: number;
+    feedback: string;
+    suggestions: string[];
+  } | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  const { timeRemaining, formatTime, resetTimer } = useQuestionTimer({
+  const { timeRemaining, reset } = useQuestionTimer({
     initialTime: sampleQuestion.timeLimit,
     autoStart: hasPlayed,
   });
@@ -75,7 +82,6 @@ const MCMultipleListeningPractice = ({ questionId }: MCMultipleListeningPractice
   };
 
   const toggleAnswer = (id: string) => {
-    if (isSubmitted) return;
     setSelectedAnswers(prev => 
       prev.includes(id) 
         ? prev.filter(a => a !== id)
@@ -86,30 +92,56 @@ const MCMultipleListeningPractice = ({ questionId }: MCMultipleListeningPractice
   const handleSubmit = () => {
     const correct = sampleQuestion.correctAnswers.filter(a => selectedAnswers.includes(a)).length;
     const incorrect = selectedAnswers.filter(a => !sampleQuestion.correctAnswers.includes(a)).length;
-    const calculatedScore = Math.max(0, (correct - incorrect) / sampleQuestion.correctAnswers.length * 90);
-    setScore(Math.round(calculatedScore));
-    setIsSubmitted(true);
+    const calculatedScore = Math.max(0, Math.round((correct - incorrect) / sampleQuestion.correctAnswers.length * 90));
+    
+    setScoreResult({
+      overallScore: calculatedScore,
+      contentScore: calculatedScore,
+      feedback: calculatedScore >= 63 
+        ? "Excellent! You identified most of the correct answers."
+        : "Review the recording carefully to identify all correct options.",
+      suggestions: calculatedScore < 63 
+        ? ["Listen for specific keywords mentioned by the speaker", "Eliminate obviously incorrect options first"]
+        : [],
+    });
+    setShowScore(true);
   };
 
   const handleRetry = () => {
     setSelectedAnswers([]);
-    setScore(null);
-    setIsSubmitted(false);
+    setShowScore(false);
+    setScoreResult(null);
     setHasPlayed(false);
     setAudioProgress(0);
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
     }
-    resetTimer();
+    reset();
   };
+
+  if (showScore && scoreResult) {
+    return (
+      <ScoreDisplay
+        scoreResult={scoreResult}
+        questionType="MC Multiple Listening"
+        onRetry={handleRetry}
+        onBackToPractice={() => navigate("/practice")}
+      />
+    );
+  }
 
   return (
     <QuestionLayout
       title={sampleQuestion.title}
+      questionType="MC Multiple Answers"
+      section="listening"
       instructions={sampleQuestion.instructions}
-      timeRemaining={formatTime(timeRemaining)}
+      timeLimit={sampleQuestion.timeLimit}
+      timeRemaining={timeRemaining}
+      hasAiScoring={false}
       currentQuestion={1}
       totalQuestions={1}
+      onSubmit={handleSubmit}
     >
       <div className="space-y-6">
         <audio ref={audioRef} src={sampleQuestion.audioUrl} preload="metadata" />
@@ -151,11 +183,10 @@ const MCMultipleListeningPractice = ({ questionId }: MCMultipleListeningPractice
                   selectedAnswers.includes(option.id)
                     ? "border-accent bg-accent/10"
                     : "border-border hover:border-accent/50"
-                } ${isSubmitted && sampleQuestion.correctAnswers.includes(option.id) ? "border-green-500 bg-green-500/10" : ""}`}
+                }`}
               >
                 <Checkbox 
                   checked={selectedAnswers.includes(option.id)}
-                  disabled={isSubmitted}
                 />
                 <span className="text-foreground">{option.text}</span>
               </div>
@@ -164,23 +195,12 @@ const MCMultipleListeningPractice = ({ questionId }: MCMultipleListeningPractice
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between">
+        <div className="flex justify-start">
           <Button variant="outline" onClick={handleRetry}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Retry
           </Button>
-          <Button 
-            variant="hero" 
-            onClick={handleSubmit}
-            disabled={selectedAnswers.length === 0 || isSubmitted}
-          >
-            Submit Answer
-          </Button>
         </div>
-
-        {isSubmitted && score !== null && (
-          <ScoreDisplay score={score} maxScore={90} showFeedback />
-        )}
       </div>
     </QuestionLayout>
   );
