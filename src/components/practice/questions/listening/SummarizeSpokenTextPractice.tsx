@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import QuestionLayout from "../QuestionLayout";
+import ScoreDisplay from "../../ScoreDisplay";
 import { useQuestionTimer } from "../useQuestionTimer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Play, Pause, Volume2, RotateCcw } from "lucide-react";
-import ScoreDisplay from "../../ScoreDisplay";
 
 interface SummarizeSpokenTextPracticeProps {
   questionId?: string;
@@ -14,20 +15,27 @@ const sampleQuestion = {
   title: "Summarize Spoken Text",
   instructions: "Listen to the audio and write a summary of what you heard. You have 10 minutes to complete your response. Your response should be 50-70 words.",
   audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-  transcript: "Climate change is affecting agricultural patterns worldwide. Scientists have observed that rising temperatures are causing shifts in growing seasons and affecting crop yields. Farmers are adapting by changing planting schedules and adopting drought-resistant varieties.",
   timeLimit: 600,
 };
 
 const SummarizeSpokenTextPractice = ({ questionId }: SummarizeSpokenTextPracticeProps) => {
+  const navigate = useNavigate();
   const [response, setResponse] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasPlayed, setHasPlayed] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
-  const [score, setScore] = useState<number | null>(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showScore, setShowScore] = useState(false);
+  const [scoreResult, setScoreResult] = useState<{
+    overallScore: number;
+    contentScore: number;
+    grammarScore?: number;
+    spellingScore?: number;
+    feedback: string;
+    suggestions: string[];
+  } | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  const { timeRemaining, isExpired, formatTime, resetTimer } = useQuestionTimer({
+  const { timeRemaining, reset } = useQuestionTimer({
     initialTime: sampleQuestion.timeLimit,
     autoStart: hasPlayed,
   });
@@ -70,29 +78,56 @@ const SummarizeSpokenTextPractice = ({ questionId }: SummarizeSpokenTextPractice
 
   const handleSubmit = () => {
     const mockScore = Math.min(90, Math.max(40, 50 + wordCount));
-    setScore(mockScore);
-    setIsSubmitted(true);
+    setScoreResult({
+      overallScore: mockScore,
+      contentScore: mockScore,
+      grammarScore: Math.floor(mockScore * 0.9),
+      spellingScore: Math.floor(mockScore * 0.95),
+      feedback: mockScore >= 63 
+        ? "Good summary! You captured the main points effectively."
+        : "Try to include more key points from the recording.",
+      suggestions: mockScore < 63 
+        ? ["Include the main topic in your opening sentence", "Summarize key supporting details"]
+        : [],
+    });
+    setShowScore(true);
   };
 
   const handleRetry = () => {
     setResponse("");
-    setScore(null);
-    setIsSubmitted(false);
+    setShowScore(false);
+    setScoreResult(null);
     setHasPlayed(false);
     setAudioProgress(0);
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
     }
-    resetTimer();
+    reset();
   };
+
+  if (showScore && scoreResult) {
+    return (
+      <ScoreDisplay
+        scoreResult={scoreResult}
+        questionType="Summarize Spoken Text"
+        onRetry={handleRetry}
+        onBackToPractice={() => navigate("/practice")}
+      />
+    );
+  }
 
   return (
     <QuestionLayout
       title={sampleQuestion.title}
+      questionType="Summarize Spoken Text"
+      section="listening"
       instructions={sampleQuestion.instructions}
-      timeRemaining={formatTime(timeRemaining)}
+      timeLimit={sampleQuestion.timeLimit}
+      timeRemaining={timeRemaining}
+      hasAiScoring={true}
       currentQuestion={1}
       totalQuestions={1}
+      onSubmit={handleSubmit}
     >
       <div className="space-y-6">
         <audio ref={audioRef} src={sampleQuestion.audioUrl} preload="metadata" />
@@ -139,29 +174,16 @@ const SummarizeSpokenTextPractice = ({ questionId }: SummarizeSpokenTextPractice
             onChange={(e) => setResponse(e.target.value)}
             placeholder="Start writing your summary here..."
             className="min-h-[200px] bg-secondary border-border"
-            disabled={isSubmitted}
           />
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between">
+        <div className="flex justify-start">
           <Button variant="outline" onClick={handleRetry}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Retry
           </Button>
-          <Button 
-            variant="hero" 
-            onClick={handleSubmit}
-            disabled={wordCount < 10 || isSubmitted}
-          >
-            Submit Answer
-          </Button>
         </div>
-
-        {/* Score Display */}
-        {isSubmitted && score !== null && (
-          <ScoreDisplay score={score} maxScore={90} showFeedback />
-        )}
       </div>
     </QuestionLayout>
   );

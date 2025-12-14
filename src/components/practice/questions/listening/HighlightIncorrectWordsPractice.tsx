@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import QuestionLayout from "../QuestionLayout";
+import ScoreDisplay from "../../ScoreDisplay";
 import { useQuestionTimer } from "../useQuestionTimer";
 import { Button } from "@/components/ui/button";
 import { Play, Pause, Volume2, RotateCcw } from "lucide-react";
-import ScoreDisplay from "../../ScoreDisplay";
 
 interface HighlightIncorrectWordsPracticeProps {
   questionId?: string;
@@ -38,15 +39,21 @@ const sampleQuestion = {
 };
 
 const HighlightIncorrectWordsPractice = ({ questionId }: HighlightIncorrectWordsPracticeProps) => {
+  const navigate = useNavigate();
   const [selectedWords, setSelectedWords] = useState<number[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasPlayed, setHasPlayed] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
-  const [score, setScore] = useState<number | null>(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showScore, setShowScore] = useState(false);
+  const [scoreResult, setScoreResult] = useState<{
+    overallScore: number;
+    contentScore: number;
+    feedback: string;
+    suggestions: string[];
+  } | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  const { timeRemaining, formatTime, resetTimer } = useQuestionTimer({
+  const { timeRemaining, reset } = useQuestionTimer({
     initialTime: sampleQuestion.timeLimit,
     autoStart: hasPlayed,
   });
@@ -86,7 +93,6 @@ const HighlightIncorrectWordsPractice = ({ questionId }: HighlightIncorrectWords
   };
 
   const toggleWord = (id: number) => {
-    if (isSubmitted) return;
     setSelectedWords(prev => 
       prev.includes(id) 
         ? prev.filter(w => w !== id)
@@ -99,29 +105,55 @@ const HighlightIncorrectWordsPractice = ({ questionId }: HighlightIncorrectWords
     const correctSelections = selectedWords.filter(id => incorrectWordIds.includes(id)).length;
     const wrongSelections = selectedWords.filter(id => !incorrectWordIds.includes(id)).length;
     const calculatedScore = Math.max(0, Math.round(((correctSelections - wrongSelections) / incorrectWordIds.length) * 90));
-    setScore(calculatedScore);
-    setIsSubmitted(true);
+    
+    setScoreResult({
+      overallScore: calculatedScore,
+      contentScore: calculatedScore,
+      feedback: calculatedScore >= 63 
+        ? "Good job! You identified most of the incorrect words."
+        : "Compare the transcript carefully with what you hear.",
+      suggestions: calculatedScore < 63 
+        ? ["Listen for slight variations in vocabulary", "Focus on nouns and verbs that might differ"]
+        : [],
+    });
+    setShowScore(true);
   };
 
   const handleRetry = () => {
     setSelectedWords([]);
-    setScore(null);
-    setIsSubmitted(false);
+    setShowScore(false);
+    setScoreResult(null);
     setHasPlayed(false);
     setAudioProgress(0);
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
     }
-    resetTimer();
+    reset();
   };
+
+  if (showScore && scoreResult) {
+    return (
+      <ScoreDisplay
+        scoreResult={scoreResult}
+        questionType="Highlight Incorrect Words"
+        onRetry={handleRetry}
+        onBackToPractice={() => navigate("/practice")}
+      />
+    );
+  }
 
   return (
     <QuestionLayout
       title={sampleQuestion.title}
+      questionType="Highlight Incorrect Words"
+      section="listening"
       instructions={sampleQuestion.instructions}
-      timeRemaining={formatTime(timeRemaining)}
+      timeLimit={sampleQuestion.timeLimit}
+      timeRemaining={timeRemaining}
+      hasAiScoring={false}
       currentQuestion={1}
       totalQuestions={1}
+      onSubmit={handleSubmit}
     >
       <div className="space-y-6">
         <audio ref={audioRef} src={sampleQuestion.audioUrl} preload="metadata" />
@@ -156,8 +188,6 @@ const HighlightIncorrectWordsPractice = ({ questionId }: HighlightIncorrectWords
           <div className="flex flex-wrap gap-1 text-lg leading-relaxed">
             {sampleQuestion.words.map((word) => {
               const isSelected = selectedWords.includes(word.id);
-              const showCorrect = isSubmitted && word.isIncorrect;
-              const showWrong = isSubmitted && isSelected && !word.isIncorrect;
               
               return (
                 <span
@@ -165,13 +195,9 @@ const HighlightIncorrectWordsPractice = ({ questionId }: HighlightIncorrectWords
                   onClick={() => toggleWord(word.id)}
                   className={`px-1 py-0.5 rounded cursor-pointer transition-all ${
                     isSelected ? "bg-accent text-accent-foreground" : "hover:bg-secondary"
-                  } ${showCorrect ? "bg-green-500/20 text-green-500 line-through" : ""} 
-                  ${showWrong ? "bg-destructive/20 text-destructive" : ""}`}
+                  }`}
                 >
                   {word.text}
-                  {showCorrect && word.correctWord && (
-                    <span className="text-green-500 ml-1 no-underline">({word.correctWord})</span>
-                  )}
                 </span>
               );
             })}
@@ -179,23 +205,12 @@ const HighlightIncorrectWordsPractice = ({ questionId }: HighlightIncorrectWords
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between">
+        <div className="flex justify-start">
           <Button variant="outline" onClick={handleRetry}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Retry
           </Button>
-          <Button 
-            variant="hero" 
-            onClick={handleSubmit}
-            disabled={isSubmitted}
-          >
-            Submit Answer
-          </Button>
         </div>
-
-        {isSubmitted && score !== null && (
-          <ScoreDisplay score={score} maxScore={90} showFeedback />
-        )}
       </div>
     </QuestionLayout>
   );

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import QuestionLayout from "../QuestionLayout";
+import ScoreDisplay from "../../ScoreDisplay";
 import { useQuestionTimer } from "../useQuestionTimer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Play, Pause, Volume2, RotateCcw } from "lucide-react";
-import ScoreDisplay from "../../ScoreDisplay";
 
 interface WriteFromDictationPracticeProps {
   questionId?: string;
@@ -19,15 +20,21 @@ const sampleQuestion = {
 };
 
 const WriteFromDictationPractice = ({ questionId }: WriteFromDictationPracticeProps) => {
+  const navigate = useNavigate();
   const [response, setResponse] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasPlayed, setHasPlayed] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
-  const [score, setScore] = useState<number | null>(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showScore, setShowScore] = useState(false);
+  const [scoreResult, setScoreResult] = useState<{
+    overallScore: number;
+    contentScore: number;
+    feedback: string;
+    suggestions: string[];
+  } | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  const { timeRemaining, formatTime, resetTimer } = useQuestionTimer({
+  const { timeRemaining, reset } = useQuestionTimer({
     initialTime: sampleQuestion.timeLimit,
     autoStart: hasPlayed,
   });
@@ -81,30 +88,55 @@ const WriteFromDictationPractice = ({ questionId }: WriteFromDictationPracticePr
   };
 
   const handleSubmit = () => {
-    const calculatedScore = calculateScore();
-    setScore(calculatedScore);
-    setIsSubmitted(true);
+    const score = calculateScore();
+    setScoreResult({
+      overallScore: score,
+      contentScore: score,
+      feedback: score >= 63 
+        ? "Great job! You captured most of the sentence correctly."
+        : "Keep practicing your listening skills to catch all the words.",
+      suggestions: score < 63 
+        ? ["Focus on connecting words and prepositions", "Practice with various accents"]
+        : [],
+    });
+    setShowScore(true);
   };
 
   const handleRetry = () => {
     setResponse("");
-    setScore(null);
-    setIsSubmitted(false);
+    setShowScore(false);
+    setScoreResult(null);
     setHasPlayed(false);
     setAudioProgress(0);
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
     }
-    resetTimer();
+    reset();
   };
+
+  if (showScore && scoreResult) {
+    return (
+      <ScoreDisplay
+        scoreResult={scoreResult}
+        questionType="Write from Dictation"
+        onRetry={handleRetry}
+        onBackToPractice={() => navigate("/practice")}
+      />
+    );
+  }
 
   return (
     <QuestionLayout
       title={sampleQuestion.title}
+      questionType="Write from Dictation"
+      section="listening"
       instructions={sampleQuestion.instructions}
-      timeRemaining={formatTime(timeRemaining)}
+      timeLimit={sampleQuestion.timeLimit}
+      timeRemaining={timeRemaining}
+      hasAiScoring={true}
       currentQuestion={1}
       totalQuestions={1}
+      onSubmit={handleSubmit}
     >
       <div className="space-y-6">
         <audio ref={audioRef} src={sampleQuestion.audioUrl} preload="metadata" />
@@ -146,36 +178,16 @@ const WriteFromDictationPractice = ({ questionId }: WriteFromDictationPracticePr
             onChange={(e) => setResponse(e.target.value)}
             placeholder="Type the sentence here..."
             className="text-lg h-14"
-            disabled={isSubmitted}
           />
         </div>
 
-        {/* Show Correct Answer */}
-        {isSubmitted && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
-            <p className="text-sm text-muted-foreground mb-2">Correct sentence:</p>
-            <p className="text-green-500 font-medium">{sampleQuestion.correctSentence}</p>
-          </div>
-        )}
-
         {/* Actions */}
-        <div className="flex justify-between">
+        <div className="flex justify-start">
           <Button variant="outline" onClick={handleRetry}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Retry
           </Button>
-          <Button 
-            variant="hero" 
-            onClick={handleSubmit}
-            disabled={!response.trim() || isSubmitted}
-          >
-            Submit Answer
-          </Button>
         </div>
-
-        {isSubmitted && score !== null && (
-          <ScoreDisplay score={score} maxScore={90} showFeedback />
-        )}
       </div>
     </QuestionLayout>
   );

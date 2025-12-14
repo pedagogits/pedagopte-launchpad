@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import QuestionLayout from "../QuestionLayout";
+import ScoreDisplay from "../../ScoreDisplay";
 import { useQuestionTimer } from "../useQuestionTimer";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Play, Pause, Volume2, RotateCcw } from "lucide-react";
-import ScoreDisplay from "../../ScoreDisplay";
 
 interface SelectMissingWordPracticeProps {
   questionId?: string;
@@ -27,15 +28,21 @@ const sampleQuestion = {
 };
 
 const SelectMissingWordPractice = ({ questionId }: SelectMissingWordPracticeProps) => {
+  const navigate = useNavigate();
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasPlayed, setHasPlayed] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
-  const [score, setScore] = useState<number | null>(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showScore, setShowScore] = useState(false);
+  const [scoreResult, setScoreResult] = useState<{
+    overallScore: number;
+    contentScore: number;
+    feedback: string;
+    suggestions: string[];
+  } | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  const { timeRemaining, formatTime, resetTimer } = useQuestionTimer({
+  const { timeRemaining, reset } = useQuestionTimer({
     initialTime: sampleQuestion.timeLimit,
     autoStart: hasPlayed,
   });
@@ -76,29 +83,55 @@ const SelectMissingWordPractice = ({ questionId }: SelectMissingWordPracticeProp
 
   const handleSubmit = () => {
     const calculatedScore = selectedAnswer === sampleQuestion.correctAnswer ? 90 : 0;
-    setScore(calculatedScore);
-    setIsSubmitted(true);
+    
+    setScoreResult({
+      overallScore: calculatedScore,
+      contentScore: calculatedScore,
+      feedback: calculatedScore === 90 
+        ? "Correct! You identified the missing word based on context."
+        : `The correct answer was "${sampleQuestion.options.find(o => o.id === sampleQuestion.correctAnswer)?.text}".`,
+      suggestions: calculatedScore === 0 
+        ? ["Use context clues from the entire recording", "Predict the missing word before looking at options"]
+        : [],
+    });
+    setShowScore(true);
   };
 
   const handleRetry = () => {
     setSelectedAnswer("");
-    setScore(null);
-    setIsSubmitted(false);
+    setShowScore(false);
+    setScoreResult(null);
     setHasPlayed(false);
     setAudioProgress(0);
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
     }
-    resetTimer();
+    reset();
   };
+
+  if (showScore && scoreResult) {
+    return (
+      <ScoreDisplay
+        scoreResult={scoreResult}
+        questionType="Select Missing Word"
+        onRetry={handleRetry}
+        onBackToPractice={() => navigate("/practice")}
+      />
+    );
+  }
 
   return (
     <QuestionLayout
       title={sampleQuestion.title}
+      questionType="Select Missing Word"
+      section="listening"
       instructions={sampleQuestion.instructions}
-      timeRemaining={formatTime(timeRemaining)}
+      timeLimit={sampleQuestion.timeLimit}
+      timeRemaining={timeRemaining}
+      hasAiScoring={false}
       currentQuestion={1}
       totalQuestions={1}
+      onSubmit={handleSubmit}
     >
       <div className="space-y-6">
         <audio ref={audioRef} src={sampleQuestion.audioUrl} preload="metadata" />
@@ -134,7 +167,7 @@ const SelectMissingWordPractice = ({ questionId }: SelectMissingWordPracticeProp
         <div className="bg-card border border-border rounded-xl p-6">
           <p className="text-foreground font-medium mb-4">{sampleQuestion.question}</p>
           
-          <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer} disabled={isSubmitted}>
+          <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer}>
             <div className="grid grid-cols-2 gap-3">
               {sampleQuestion.options.map((option) => (
                 <div
@@ -143,7 +176,7 @@ const SelectMissingWordPractice = ({ questionId }: SelectMissingWordPracticeProp
                     selectedAnswer === option.id
                       ? "border-accent bg-accent/10"
                       : "border-border hover:border-accent/50"
-                  } ${isSubmitted && option.id === sampleQuestion.correctAnswer ? "border-green-500 bg-green-500/10" : ""}`}
+                  }`}
                 >
                   <RadioGroupItem value={option.id} id={option.id} />
                   <Label htmlFor={option.id} className="cursor-pointer flex-1">
@@ -156,23 +189,12 @@ const SelectMissingWordPractice = ({ questionId }: SelectMissingWordPracticeProp
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between">
+        <div className="flex justify-start">
           <Button variant="outline" onClick={handleRetry}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Retry
           </Button>
-          <Button 
-            variant="hero" 
-            onClick={handleSubmit}
-            disabled={!selectedAnswer || isSubmitted}
-          >
-            Submit Answer
-          </Button>
         </div>
-
-        {isSubmitted && score !== null && (
-          <ScoreDisplay score={score} maxScore={90} showFeedback />
-        )}
       </div>
     </QuestionLayout>
   );
