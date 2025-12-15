@@ -8,6 +8,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Practice from "./pages/Practice";
 import PracticeQuestion from "./pages/PracticeQuestion";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/practice" element={<ProtectedRoute><Practice /></ProtectedRoute>} />
           <Route path="/practice/:questionType" element={<ProtectedRoute><PracticeQuestion /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
